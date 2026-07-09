@@ -6,7 +6,7 @@
 //
 
 import XCTest
-@testable import FileManagerKit
+@testable import AnvyxFileKit
 
 final class FileManagerKitTests: XCTestCase {
     private var root: URL!

@@ -7,10 +7,10 @@ let package = Package(
         .iOS(.v17)
     ],
     products: [
-        .library(name: "FileManagerKit", targets: ["FileManagerKit"]),
+        .library(name: "AnvyxFileKit", targets: ["AnvyxFileKit"]),
     ],
     targets: [
-        .target(name: "FileManagerKit"),
-        .testTarget(name: "FileManagerKitTests", dependencies: ["FileManagerKit"]),
+        .target(name: "AnvyxFileKit"),
+        .testTarget(name: "AnvyxFileKitTests", dependencies: ["AnvyxFileKit"]),
     ]
 )
