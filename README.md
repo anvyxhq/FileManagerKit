@@ -20,18 +20,18 @@ Files-app-style collision naming — behind a testable port.
 - **`FileThumbnail`** — QuickLook thumbnails for any file type.
 
 > Merge is format-specific (e.g. combining PDFs) — feed `selectedItems` to
-> [PDFKitWrapper](https://github.com/theanvora/PDFKitWrapper)'s `PDFDocument.merged`.
+> [PDFKitWrapper](https://github.com/theanvyx/PDFKitWrapper)'s `PDFDocument.merged`.
 
 ## Installation
 
 ```swift
-.package(url: "https://github.com/theanvora/FileManagerKit.git", from: "1.0.0")
+.package(url: "https://github.com/theanvyx/FileManagerKit.git", branch: "main")
 ```
 
 ## Usage
 
 ```swift
-import FileManagerKit
+import AnvyxFileKit
 
 @State private var files = FilesModel(store: DocumentFileStore())
 
@@ -64,7 +64,7 @@ Inject a temp-directory `DocumentFileStore(root:)` in tests — no real Document
 
 ## Requirements
 
-- iOS 17.0+ · Swift 5.9+
+- iOS 17+ · Swift 5.9+
 
 ## License
 
