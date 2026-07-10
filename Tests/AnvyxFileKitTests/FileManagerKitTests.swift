@@ -89,7 +89,7 @@ final class FileManagerKitTests: XCTestCase {
     }
 
     @MainActor
-    func testCutAndPasteMovesAcrossFolders() throws {
+    func testCutAndPasteMovesAcrossFolders() async throws {
         let store = DocumentFileStore(root: root)
         let file = try store.save(Data(), name: "move-me.txt", in: root)
         let folder = try store.createFolder(named: "Dest", in: root)
@@ -100,7 +100,7 @@ final class FileManagerKitTests: XCTestCase {
         XCTAssertTrue(source.canPaste)
 
         let dest = FilesModel(store: store, directory: folder.url, clipboard: clipboard)
-        dest.paste()
+        await dest.paste()
         XCTAssertEqual(dest.items.count, 1)
         XCTAssertEqual(try store.contents(of: folder.url).count, 1)
     }
@@ -116,7 +116,7 @@ final class FileManagerKitTests: XCTestCase {
     }
 
     @MainActor
-    func testFilesModelSelectionAndSort() {
+    func testFilesModelSelectionAndSort() async {
         let store = DocumentFileStore(root: root)
         _ = try? store.createFolder(named: "Zed", in: root)
         _ = try? store.save(Data(), name: "apple.txt", in: root)
@@ -130,8 +130,51 @@ final class FileManagerKitTests: XCTestCase {
         model.toggle(file)
         XCTAssertEqual(model.selectedItems.count, 1)
 
-        model.deleteSelected()
+        await model.deleteSelected()
         XCTAssertFalse(model.isSelecting)
         XCTAssertNil(model.items.first(where: { !$0.isDirectory }))
+    }
+
+    // MARK: - Async (off-main) store
+
+    func testAsyncSearchMatchesSyncSearch() async throws {
+        let store = DocumentFileStore(root: root)
+        let folder = try store.createFolder(named: "Sub", in: root)
+        _ = try store.save(Data(), name: "report-2026.pdf", in: folder.url)
+        _ = try store.save(Data(), name: "notes.txt", in: root)
+
+        let hits = try await store.async.search("report", in: root)
+        XCTAssertEqual(hits.count, 1)
+        XCTAssertEqual(hits.first?.displayName, "report-2026")
+    }
+
+    func testAsyncCopyThenMovePlacesFileAndAutoIncrements() async throws {
+        let store = DocumentFileStore(root: root)
+        let file = try store.save(Data("x".utf8), name: "a.txt", in: root)
+        let dest = try store.createFolder(named: "Dest", in: root)
+
+        let copied = try await store.async.copy(file, to: dest.url)
+        XCTAssertEqual(copied.displayName, "a")
+        XCTAssertEqual(try store.contents(of: dest.url).count, 1)
+
+        // Moving the original into the same folder collides → auto-incremented.
+        let moved = try await store.async.move(file, to: dest.url)
+        XCTAssertEqual(moved.displayName, "a (1)")
+        XCTAssertEqual(try store.contents(of: dest.url).count, 2)
+        XCTAssertEqual(try store.contents(of: root).count, 1) // only "Dest" remains at root
+    }
+
+    @MainActor
+    func testFilesModelAsyncCopyRefreshesItems() async throws {
+        let store = DocumentFileStore(root: root)
+        let file = try store.save(Data(), name: "src.txt", in: root)
+        let dest = try store.createFolder(named: "Into", in: root)
+
+        let model = FilesModel(store: store, directory: dest.url)
+        XCTAssertTrue(model.items.isEmpty)
+
+        await model.copy([file], to: dest.url)
+        XCTAssertEqual(model.items.count, 1)
+        XCTAssertEqual(model.items.first?.displayName, "src")
     }
 }

@@ -45,9 +45,21 @@ public final class FilesModel {
 
     // MARK: - Loading / navigation
 
+    /// Synchronous list — used by `init` so the first render has content. Blocks
+    /// the caller; prefer the `async` overload for user-triggered refreshes.
     public func reload() {
         do {
             items = sorted(try store.contents(of: directory))
+        } catch {
+            errorMessage = error.localizedDescription
+            items = []
+        }
+    }
+
+    /// Off-main refresh of `items` (does not block the main actor).
+    public func reload() async {
+        do {
+            items = sorted(try await store.async.contents(of: directory))
         } catch {
             errorMessage = error.localizedDescription
             items = []
@@ -61,26 +73,30 @@ public final class FilesModel {
     }
 
     // MARK: - Operations
+    //
+    // All mutating operations are `async`: they run the `FileManager` I/O off the
+    // main actor via `store.async` (so the UI never blocks) and refresh `items`
+    // on completion. Call them from a `Task` / `.task` in SwiftUI.
 
-    public func createFolder(named name: String) {
-        perform { _ = try store.createFolder(named: name, in: directory) }
+    public func createFolder(named name: String) async {
+        await perform { _ = try await store.async.createFolder(named: name, in: directory) }
     }
 
-    public func rename(_ item: FileItem, to newName: String) {
-        perform { _ = try store.rename(item, to: newName) }
+    public func rename(_ item: FileItem, to newName: String) async {
+        await perform { _ = try await store.async.rename(item, to: newName) }
     }
 
-    public func duplicate(_ item: FileItem) {
-        perform { _ = try store.duplicate(item) }
+    public func duplicate(_ item: FileItem) async {
+        await perform { _ = try await store.async.duplicate(item) }
     }
 
-    public func copy(_ targets: [FileItem], to destination: URL) {
-        perform { for item in targets { _ = try store.copy(item, to: destination) } }
+    public func copy(_ targets: [FileItem], to destination: URL) async {
+        await perform { for item in targets { _ = try await store.async.copy(item, to: destination) } }
     }
 
-    /// Recursive name search from this directory (does not mutate `items`).
-    public func search(_ query: String) -> [FileItem] {
-        (try? store.search(query, in: directory)) ?? []
+    /// Recursive name search from this directory, off-main (does not mutate `items`).
+    public func search(_ query: String) async -> [FileItem] {
+        (try? await store.async.search(query, in: directory)) ?? []
     }
 
     // MARK: - Clipboard (cut / copy / paste)
@@ -98,25 +114,25 @@ public final class FilesModel {
     public var canPaste: Bool { !clipboard.isEmpty }
 
     /// Paste the shared clipboard into the current directory — moves (cut) or copies.
-    public func paste() {
+    public func paste() async {
         guard let action = clipboard.action, !clipboard.items.isEmpty else { return }
-        perform {
+        await perform {
             for item in clipboard.items {
                 switch action {
-                case .cut:  _ = try store.move(item, to: directory)
-                case .copy: _ = try store.copy(item, to: directory)
+                case .cut:  _ = try await store.async.move(item, to: directory)
+                case .copy: _ = try await store.async.copy(item, to: directory)
                 }
             }
         }
         clipboard.clear()
     }
 
-    public func delete(_ targets: [FileItem]) {
-        perform { for item in targets { try store.delete(item) } }
+    public func delete(_ targets: [FileItem]) async {
+        await perform { for item in targets { try await store.async.delete(item) } }
     }
 
-    public func move(_ targets: [FileItem], to destination: URL) {
-        perform { for item in targets { _ = try store.move(item, to: destination) } }
+    public func move(_ targets: [FileItem], to destination: URL) async {
+        await perform { for item in targets { _ = try await store.async.move(item, to: destination) } }
     }
 
     // MARK: - Selection
@@ -135,20 +151,22 @@ public final class FilesModel {
         items.filter { selection.contains($0.url) }
     }
 
-    public func deleteSelected() {
-        delete(selectedItems)
+    public func deleteSelected() async {
+        await delete(selectedItems)
         setSelecting(false)
     }
 
     // MARK: - Private
 
-    private func perform(_ action: () throws -> Void) {
+    /// Run a mutating file operation off-main, then refresh `items`.
+    private func perform(_ action: () async throws -> Void) async {
         do {
-            try action()
-            reload()
+            try await action()
         } catch {
             errorMessage = error.localizedDescription
+            return
         }
+        await reload()
     }
 
     private func sorted(_ list: [FileItem]) -> [FileItem] {
